@@ -1,0 +1,271 @@
+import re
+import numpy as np 
+from scipy.sparse import csr_matrix
+from scipy.sparse import coo_matrix, hstack
+from sklearn.pipeline import FeatureUnion
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+import nltk
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
+import matplotlib.pylab as plt
+from sklearn.pipeline import Pipeline
+        
+class FeatEngr:
+    def __init__(self):
+        
+        
+        return None;
+        #self.vectorizer = CountVectorizer(stop_words = 'english', ngram_range=(1,4))
+
+    def train_test_modifier(self, examples, trope):
+        
+        self.trope1 = []
+        
+        for j in trope:
+            j = re.findall('[A-Z][^A-Z]*', j)
+            j = " ".join(j)
+            self.trope1.append(" " + j + " ")
+        
+        newex = dict()
+        
+        newex['sentence'] = examples
+        newex['trope1'] = self.trope1
+        
+        return newex
+    
+    def build_train_features(self, examples, trope):
+        
+        
+        """
+        Method to take in training text features and do further feature engineering 
+        Most of the work in this homework will go here, or in similar functions  
+        :param examples: currently just a list of forum posts  
+        """
+        page1 = []
+        page2 = []
+        self.trope1 = []
+        trope2 = []
+        
+        for j in trope:
+            trope2.append (" " + j + " ")
+            j = re.findall('[A-Z][^A-Z]*', j)
+            j = " ".join(j)
+            self.trope1.append(" " + j + " ")
+            #print(j)
+        
+        #Combining features using FeatureUnion
+        self.allmyfeatures = FeatureUnion([("bag-of-words", CountVectorizer(stop_words='english', 
+                                                                            ngram_range=(1,6))),
+                                      ("tf-idfs", TfidfVectorizer()),
+                                      ("lowercase-alphabets", LowerAlphabetTransformer()),
+                                      #("uppercase-alphabets", UpperAlphabetTransformer()),
+                                      #("digits", DigitTransformer()),
+                                      #("special-characters", SpecialCharTransformer()),
+                                      ("spaces", SpaceTransformer())
+                                     ])
+        
+        self.allmyfeatures = FeatureUnion([ ('sentence_bagOfWords', Pipeline([
+                                                ('sentence_sel1', ItemSelector(key='sentence')),
+                                                ("bag-of-words", CountVectorizer(stop_words='english', 
+                                                                            ngram_range=(1,6)))])),
+                                            ('sentence_tfidf', Pipeline([
+                                                ('sentence_sel2', ItemSelector(key='sentence')),
+                                                ("tf_idf", TfidfVectorizer())])),
+                                            ('sentence_loweralpha', Pipeline([
+                                                ('sentence_sel3', ItemSelector(key='sentence')),
+                                                ("lower-alphabets", LowerAlphabetTransformer())])),
+                                            ('sentence_spacer', Pipeline([
+                                                ('sentence_sel4', ItemSelector(key='sentence')),
+                                                ("spaces", SpaceTransformer())])),
+                                            ('trope_OneHotEncoding', Pipeline([
+                                                ('trope_sel1', ItemSelector(key='trope1')),
+                                                ("bag-of-words", CountVectorizer(ngram_range=(0,1)))])),
+                                            #('trope_loweralpha', Pipeline([
+                                            #    ('trope_sel2', ItemSelector(key='trope1')),
+                                            #    ("lower-alphabets-trope", LowerAlphabetTransformer())])),
+                                            #('trope_upperalpha', Pipeline([
+                                            #    ('trope_sel3', ItemSelector(key='trope1')),
+                                            #    ("upper-alphabets-trope", UpperAlphabetTransformer())])),
+                                          ]);
+                                           
+        
+        #newex = ["{}{}".format(a_, b_) for a_, b_ in zip(examples, trope1)]
+        '''newex = dict()
+        
+        newex['sentence'] = examples
+        newex['trope1'] = self.trope1'''
+        
+        newex = dict()
+        
+        newex = self.train_test_modifier(examples,trope)
+        
+        Z1 = self.allmyfeatures.fit_transform(newex)
+        
+        #print("Z1 has type ", type(Z1))
+        print("The final matrix with all features has shape ", Z1.shape)
+        
+        return Z1
+
+    def get_test_features(self, examples, page, trope):
+        """
+        Method to take in test text features and transform the same way as train features 
+        :param examples: currently just a list of forum posts  
+        """
+        '''A1 = self.allmyfeatures.transform(examples)
+        A2 = self.allmyfeatures.transform(page)
+        A3 = self.allmyfeatures.transform(trope)'''
+        
+        #Af = np.concatenate((A1, A2, A3), axis=1)
+        
+        newex = dict()
+        
+        '''newex['sentence'] = examples
+        newex['trope1'] = self.trope1'''
+        
+        newex = self.train_test_modifier(examples,trope)
+        
+        
+        return self.allmyfeatures.transform(newex)
+
+    def show_top10(self):
+        """
+        prints the top 10 features for the positive class and the 
+        top 10 features for the negative class. 
+        """
+        feature_names = np.asarray(self.vectorizer.get_feature_names())
+        top10 = np.argsort(self.logreg.coef_[0])[-10:]
+        bottom10 = np.argsort(self.logreg.coef_[0])[:10]
+        print("Pos: %s" % " ".join(feature_names[top10]))
+        print("Neg: %s" % " ".join(feature_names[bottom10]))
+                
+    def train_model(self, random_state=1234):
+        """
+        Method to read in training data from file, and 
+        train Logistic Regression classifier. 
+        
+        :param random_state: seed for random number generator 
+        """
+        
+        from sklearn.linear_model import LogisticRegression 
+        from sklearn.model_selection import GridSearchCV
+        from sklearn.model_selection import train_test_split
+        from sklearn.model_selection import cross_val_score
+        from sklearn.model_selection import learning_curve
+        
+        # load data 
+        dfTrain = pd.read_csv("../data/spoilers/train.csv")
+        dfTrain.head()
+        
+        # get training features and labels 
+        self.X_train = self.build_train_features(list(dfTrain["sentence"]), list(dfTrain["trope"]))
+        self.y_train = np.array(dfTrain["spoiler"], dtype=int)
+        
+        #Do train test split using sklearn package
+        X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=0.2, random_state=1230)
+        
+        print (X_train.shape)
+        print (y_train.shape)
+        print (X_test.shape)
+        print (y_test.shape)
+        print ("The type of X_train is " ,type(X_train))
+        
+        # train logistic regression model.  !!You MAY NOT CHANGE THIS!! 
+        self.logreg = LogisticRegression(random_state=random_state)
+        #self.logreg.fit(self.X_train, self.y_train)
+        self.logreg.fit(X_train, y_train)
+        
+
+        #Performance on train-test-split on training data
+        print("Accuracy on training data = {:.3f}".format(self.logreg.score(X_train, y_train)))
+        print("Accuracy on validation data = {:.3f}".format(self.logreg.score(X_test, y_test)))
+        
+
+        #Performance on cross-validation on training data
+        scores = cross_val_score(self.logreg, self.X_train, self.y_train, cv=5)
+        print(scores)
+        print("Mean Accuracy in Cross-Validation = {:.3f}".format(scores.mean()))
+        
+        '''ylim=None
+        title = "Learning Curve"
+        
+        
+        #Plotting the learning curve for our model
+        plt.figure()
+        plt.title(title)
+        if ylim is not None:
+            plt.ylim(*ylim)
+        plt.xlabel("Number of Training examples")
+        plt.ylabel("Errors")
+        train_sizes, train_scores, test_scores = learning_curve(
+            self.logreg, self.X_train, self.y_train, cv=5, n_jobs=1, train_sizes=np.linspace(.1, 1.0, 5))
+        train_scores_mean = np.mean(train_scores, axis=1)
+        train_scores_std = np.std(train_scores, axis=1)
+        test_scores_mean = np.mean(test_scores, axis=1)
+        test_scores_std = np.std(test_scores, axis=1)
+        plt.grid()
+
+        plt.fill_between(train_sizes, train_scores_mean - train_scores_std,
+                         train_scores_mean + train_scores_std, alpha=0.1,
+                         color="r")
+        plt.fill_between(train_sizes, test_scores_mean - test_scores_std,
+                         test_scores_mean + test_scores_std, alpha=0.1, color="g")
+        plt.plot(train_sizes,1 - train_scores_mean, 'o-', color="r",
+                 label="Training score")
+        plt.plot(train_sizes,1 - test_scores_mean, 'o-', color="g",
+                 label="Cross-validation score")
+
+        plt.legend(loc="best")
+        plt.show()'''
+        
+    def error_analysis(self):
+        
+        from sklearn.cross_validation import train_test_split
+        from sklearn.metrics import accuracy_score
+        from sklearn.metrics import classification_report
+        from sklearn.linear_model import LogisticRegression
+        
+        
+        # Fit Model to Train Data
+        limit = .5
+        test_size = .2
+        train = pd.read_csv("../data/spoilers/train.csv")
+        # Split train data into train and validation data (also shuffles rows)
+        
+        train_limited = train.sample(frac=limit)
+        X_train, X_val, y_train, y_val = train_test_split(train_limited, train_limited['spoiler'], test_size=test_size)
+        xtr = self.build_train_features(list(X_train["sentence"]),list(X_train["trope"]))
+        ytr = np.array(y_train, dtype=int)
+        xval = self.allmyfeatures.transform(list(X_val["sentence"]))
+        yval = np.array(y_val, dtype=int)
+        self.logreg = LogisticRegression(random_state=1234)
+        self.logreg.fit(xtr, ytr)
+        
+        
+        pred_val = self.logreg.predict(xval)
+        print ("Validation Accuracy: ", accuracy_score(yval, pred_val, 0))
+        
+        # Error Analysis
+        report = classification_report(y_val, pred_val)
+        print(report)
+    
+    def model_predict(self):
+        """
+        Method to read in test data from file, make predictions
+        using trained model, and dump results to file 
+        """
+        
+        # read in test data 
+        dfTest  = pd.read_csv("../data/spoilers/test.csv")
+        #dfTest.head()
+        
+        # featurize test data 
+        self.X_test = self.get_test_features(list(dfTest["sentence"]), list(dfTest["page"]), list(dfTest["trope"]))
+       
+        print ("The shape of X_test is ", self.X_test.shape)
+        # make predictions on test data 
+        pred = self.logreg.predict(self.X_test)
+        
+        # dump predictions to file for submission to Kaggle  
+        pd.DataFrame({"spoiler": np.array(pred, dtype=bool)}).to_csv("prediction-12.csv", index=True, index_label="Id")'
